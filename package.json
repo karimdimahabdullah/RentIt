@@ -1,17 +1,32 @@
 {
-  "name": "rentit",
+  "name": "rentit-lifecycle",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "RentIt capstone - rental lifecycle and approvals module (Node.js + Express + MongoDB)",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node src/server.js",
+    "dev": "NODE_ENV=development node src/server.js",
+    "test": "node --test tests/*.test.js",
+    "seed": "curl -s -X POST http://localhost:4000/api/dev/seed -H 'x-user-id: seed' -H 'x-user-role: admin'",
+    "postman": "newman run postman/RentIt-Lifecycle.postman_collection.json -e postman/RentIt-Lifecycle.postman_environment.json"
   },
-  "keywords": [],
+  "keywords": [
+    "rentit",
+    "capstone",
+    "rental-lifecycle"
+  ],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "express": "^5.2.1"
-  }
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.10.2",
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "newman": "^6.2.2",
+    "supertest": "^7.3.0"
+  },
+  "type": "module"
 }

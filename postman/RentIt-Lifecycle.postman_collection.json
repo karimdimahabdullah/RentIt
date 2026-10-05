@@ -1,0 +1,6188 @@
+{
+  "info": {
+    "name": "RentIt - Rental Lifecycle Module",
+    "description": "Standalone Postman suite for the RentIt rental lifecycle & approvals module.\n\nRun order: \"0. Setup\" first (seeds demo users + equipment and captures their ids into environment variables), then any other folder top-to-bottom. Each folder after Setup creates its own fresh booking as its first request, so folders can be re-run independently as long as Setup has run at least once.\n\nAuth: this collection uses the x-user-id / x-user-role dev headers (only active when ENABLE_DEV_ROUTES=true, the .env.example default). Swap these for a real `Authorization: Bearer <jwt>` header once wired into the full RentIt backend - see auth.js.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Seed demo users + equipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "seed"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/seed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "seed"
+              ]
+            },
+            "description": "Wipes lifecycle collections and creates fixed demo users (renter, owner, admin, otherOwner, otherRenter) and two pieces of equipment. Run this first, and re-run any time you want a clean slate."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"seed succeeded\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.environment.set(\"renterId\", j.renterId);",
+                  "pm.environment.set(\"ownerId\", j.ownerId);",
+                  "pm.environment.set(\"adminId\", j.adminId);",
+                  "pm.environment.set(\"otherOwnerId\", j.otherOwnerId);",
+                  "pm.environment.set(\"otherRenterId\", j.otherRenterId);",
+                  "pm.environment.set(\"equipmentId\", j.equipmentId);",
+                  "pm.environment.set(\"equipmentId2\", j.equipmentId2);",
+                  "pm.environment.set(\"equipmentId3\", j.equipmentId3);",
+                  "pm.environment.set(\"equipmentId4\", j.equipmentId4);",
+                  "pm.environment.set(\"equipmentId5\", j.equipmentId5);",
+                  "pm.environment.set(\"equipmentId6\", j.equipmentId6);",
+                  "pm.environment.set(\"equipmentId7\", j.equipmentId7);",
+                  "pm.environment.set(\"otherEquipmentId\", j.otherEquipmentId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset clock to real time",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/reset-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "reset-clock"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"clock reset\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Booking creation & payment",
+      "item": [
+        {
+          "name": "Create booking (Pending)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate}}\",\n  \"endDate\": \"{{endDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "// start in 5 days, end in 8 days - overwrite the templated timestamps",
+                  "var start = new Date(Date.now() + 5*24*60*60*1000);",
+                  "var end = new Date(Date.now() + 8*24*60*60*1000);",
+                  "pm.variables.set(\"startDate\", start.toISOString());",
+                  "pm.variables.set(\"endDate\", end.toISOString());",
+                  "      "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"booking created as pending\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n",
+                  "pm.test(\"status is pending\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"pending\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject: create your own equipment (should 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate}}\",\n  \"endDate\": \"{{endDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"owner cannot book own equipment\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get booking",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched booking\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pay demo (rental + deposit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"paid\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"amountPaid > 0\", function () { pm.expect(pm.response.json().booking.amountPaid).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pay again (should 409 - already paid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cannot pay twice\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Owner responds (approve / reject)",
+      "item": [
+        {
+          "name": "Create fresh booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate}}\",\n  \"endDate\": \"{{endDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startDate\", new Date(Date.now()+5*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endDate\", new Date(Date.now()+8*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve as wrong owner (403 - loophole check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherOwnerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"wrong owner rejected\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve as renter (403 - role/ownership check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"renter cannot approve\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve (owner) - success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is approved\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"approved\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve again (400 - already approved)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cannot approve twice\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create + reject a second booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate2}}\",\n  \"endDate\": \"{{endDate2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startDate2\", new Date(Date.now()+20*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endDate2\", new Date(Date.now()+22*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"rejectBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject (owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{rejectBookingId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{rejectBookingId}}",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Not available those dates\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is rejected\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"rejected\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Overlap & auto-reject-conflicting race",
+      "item": [
+        {
+          "name": "Create booking A (renter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startA}}\",\n  \"endDate\": \"{{endA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startA\", new Date(Date.now()+30*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endA\", new Date(Date.now()+33*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"bookingA\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create booking B (other renter, overlapping dates)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startB}}\",\n  \"endDate\": \"{{endB}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startB\", new Date(Date.now()+31*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endB\", new Date(Date.now()+34*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"B created - both Pending is fine, Pending never blocks another Pending\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"bookingB\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve A (succeeds, and auto-rejects B as a side effect)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingA}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingA}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A approved\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"B is reported as auto-rejected in the response\", function () {\n  var ids = pm.response.json().autoRejectedConflictingBookingIds || [];\n  pm.expect(ids).to.include(pm.environment.get(\"bookingB\"));\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm B's new status directly (no manual reject needed)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"B is rejected with a clear reason\", function () {\n  var b = pm.response.json().booking;\n  pm.expect(b.status).to.eql(\"rejected\");\n  pm.expect(b.rejectionReason).to.match(/booked by another renter/);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve B now (400 - no longer Pending, not a fresh overlap check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingB}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingB}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"already rejected, cannot approve\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other renter's notification about the auto-rejection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has a notification explaining why their request was rejected\", function () {\n  var n = pm.response.json().notifications;\n  pm.expect(n.length).to.be.at.least(1);\n  pm.expect(n[0].type).to.eql(\"booking_rejected_conflict\");\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Cancellation (renter & owner)",
+      "item": [
+        {
+          "name": "Create + approve booking (renter cancel test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate}}\",\n  \"endDate\": \"{{endDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startDate\", new Date(Date.now()+10*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endDate\", new Date(Date.now()+12*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pay demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"paid\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter cancel (>24h before start - free)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "cancel"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cancelled\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"free tier\", function () { pm.expect(pm.response.json().booking.renterPenalty.tier).to.eql(\"free\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create + approve booking (owner cancel test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startDate3}}\",\n  \"endDate\": \"{{endDate3}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startDate3\", new Date(Date.now()+15*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endDate3\", new Date(Date.now()+17*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"ownerCancelBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{ownerCancelBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{ownerCancelBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner cancel WITHOUT reason (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{ownerCancelBookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{ownerCancelBookingId}}",
+                "cancel"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"reason required\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner cancel WITH reason (success, penalty as debt)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{ownerCancelBookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{ownerCancelBookingId}}",
+                "cancel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Equipment broke down\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cancelled\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"owner penalty recorded\", function () { pm.expect(pm.response.json().booking.ownerPenalty.amount).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Waive penalty as non-admin (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{ownerCancelBookingId}}/waive-penalty",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{ownerCancelBookingId}}",
+                "waive-penalty"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"trying to waive own\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"non-admin cannot waive\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Waive penalty as admin (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{ownerCancelBookingId}}/waive-penalty",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{ownerCancelBookingId}}",
+                "waive-penalty"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Confirmed equipment failure, not owner negligence\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"waived\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Pickup & no-show",
+      "item": [
+        {
+          "name": "Create booking starting now",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId2}}\",\n  \"startDate\": \"{{startNow}}\",\n  \"endDate\": \"{{endNow}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startNow\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endNow\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup on/after start date -> goes straight to Active",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pickup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Full tank, no visible damage\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"picked up\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is active\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"active\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create + approve a booking for EARLY pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId7}}\",\n  \"startDate\": \"{{earlyStart}}\",\n  \"endDate\": \"{{earlyEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"earlyStart\", new Date(Date.now()+5*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"earlyEnd\", new Date(Date.now()+8*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"earlyPickupBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{earlyPickupBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{earlyPickupBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup BEFORE start date -> lands in Picked Up, not Active",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{earlyPickupBookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{earlyPickupBookingId}}",
+                "pickup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Renter wanted it a few days early\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"picked up\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is picked_up\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"picked_up\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Picked Up still blocks the equipment's dates for others",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId7}}\",\n  \"startDate\": \"{{earlyStart}}\",\n  \"endDate\": \"{{earlyEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"blocked - equipment is already with the first renter\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run daily job before the start date (nothing to promote yet)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/run-daily-job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "run-daily-job"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ran\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"nothing activated yet\", function () { pm.expect(pm.response.json().summary.activated_picked_up).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Advance clock past the start date",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/advance-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "advance-clock"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minutes\": 7210\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"advanced\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run daily job again - now promotes Picked Up to Active",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/run-daily-job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "run-daily-job"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ran\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"one booking activated\", function () { pm.expect(pm.response.json().summary.activated_picked_up).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm it's Active now",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{earlyPickupBookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{earlyPickupBookingId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is active\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"active\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset clock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/reset-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "reset-clock"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"reset\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create + approve a third booking (report-issue-at-pickup test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId4}}\",\n  \"startDate\": \"{{startNow3}}\",\n  \"endDate\": \"{{endNow3}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startNow3\", new Date(Date.now()+90*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endNow3\", new Date(Date.now()+92*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"pickupIssueBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{pickupIssueBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{pickupIssueBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report an issue at pickup instead of confirming it (reason required)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{pickupIssueBookingId}}/pickup/report-issue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{pickupIssueBookingId}}",
+                "pickup",
+                "report-issue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"reason required\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report an issue at pickup (success -> Disputed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{pickupIssueBookingId}}/pickup/report-issue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{pickupIssueBookingId}}",
+                "pickup",
+                "report-issue"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Equipment already has visible damage before handover\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"disputed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is disputed, from approved\", function () {\n  var b = pm.response.json().booking;\n  pm.expect(b.status).to.eql(\"disputed\");\n  pm.expect(b.disputedFrom).to.eql(\"approved\");\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create + approve a second booking (no-show test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId3}}\",\n  \"startDate\": \"{{startNow2}}\",\n  \"endDate\": \"{{endNow2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startNow2\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endNow2\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"noShowBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{noShowBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{noShowBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark no-show BEFORE grace period (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{noShowBookingId}}/no-show",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{noShowBookingId}}",
+                "no-show"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"grace period not elapsed\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Advance clock past grace period (dev tool)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/advance-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "advance-clock"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minutes\": 181\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"clock advanced\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark no-show AFTER grace period (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{noShowBookingId}}/no-show",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{noShowBookingId}}",
+                "no-show"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"no-show recorded\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is no_show\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"no_show\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter disputes the no-show (within window)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{noShowBookingId}}/no-show/dispute",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{noShowBookingId}}",
+                "no-show",
+                "dispute"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"I arrived on time, owner was not there\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"disputed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is disputed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"disputed\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset clock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/reset-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "reset-clock"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"reset\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Return (claim / confirm / dispute)",
+      "item": [
+        {
+          "name": "Create + approve + pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId4}}\",\n  \"startDate\": \"{{startR}}\",\n  \"endDate\": \"{{endR}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startR\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endR\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pickup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"clean\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"active\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter claims return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/return/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "return",
+                "claim"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Left at the front gate\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"return claimed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is return_claimed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"return_claimed\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner confirms return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/return/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "return",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"All good, minor wear\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"returned\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is returned\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"returned\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create second booking for owner-direct-confirm + dispute test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId5}}\",\n  \"startDate\": \"{{startR2}}\",\n  \"endDate\": \"{{endR2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startR2\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endR2\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"disputeBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "pickup"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"active\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter claims return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/return/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "return",
+                "claim"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"claimed\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner disputes the claimed return (reason required)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/return/dispute",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "return",
+                "dispute"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Equipment came back damaged\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"disputed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is disputed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"disputed\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Completion (close / report issue)",
+      "item": [
+        {
+          "name": "Create + approve + pickup + return-confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId6}}\",\n  \"startDate\": \"{{startC}}\",\n  \"endDate\": \"{{endC}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startC\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endC\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "\nvar json = pm.response.json();\nif (json.booking && json.booking._id) { pm.environment.set(\"bookingId\", json.booking._id); }\n"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pay demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"paid\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "pickup"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"active\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner confirms return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/return/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "return",
+                "confirm"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"returned\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close: no issues (Completed, deposit released)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "close"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"completed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is completed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"completed\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create second booking for report-issue test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId7}}\",\n  \"startDate\": \"{{startC2}}\",\n  \"endDate\": \"{{endC2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startC2\", new Date(Date.now()).toISOString());",
+                  "pm.variables.set(\"endC2\", new Date(Date.now()+2*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"issueBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{issueBookingId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{issueBookingId}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"approved\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{issueBookingId}}/pickup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{issueBookingId}}",
+                "pickup"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"active\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner confirms return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{issueBookingId}}/return/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{issueBookingId}}",
+                "return",
+                "confirm"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"returned\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report issue (within claim window -> Disputed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{issueBookingId}}/report-issue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{issueBookingId}}",
+                "report-issue"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Found a crack after closer inspection\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"disputed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is disputed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"disputed\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Admin resolves a dispute",
+      "item": [
+        {
+          "name": "Resolve outstanding disputed booking -> Completed with deduction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{issueBookingId}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{issueBookingId}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"outcome\": \"completed\",\n  \"reason\": \"Minor pre-existing wear, partial deduction agreed\",\n  \"deductionAmount\": 15\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"resolved\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is completed\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"completed\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve as non-admin (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"outcome\": \"completed\",\n  \"reason\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"non-admin blocked\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve with invalid outcome (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"outcome\": \"bogus\",\n  \"reason\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"invalid outcome rejected\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve the return-dispute booking -> Cancelled",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{disputeBookingId}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{disputeBookingId}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"outcome\": \"cancelled\",\n  \"reason\": \"Damage inconclusive, cancelling as goodwill\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"resolved\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"status is cancelled\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"cancelled\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Daily job (system transitions, time-travel)",
+      "item": [
+        {
+          "name": "Create booking (for pending expiry)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{startJ}}\",\n  \"endDate\": \"{{endJ}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"startJ\", new Date(Date.now()+10*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"endJ\", new Date(Date.now()+12*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"created\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"expiryBookingId\", pm.response.json().booking._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run daily job (nothing eligible yet)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/run-daily-job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "run-daily-job"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ran\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"nothing expired yet\", function () { pm.expect(pm.response.json().summary.expired_pending).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Advance clock 49 hours (past the 48h pending-expiry default)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/advance-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "advance-clock"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minutes\": 2940\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"advanced\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run daily job (now expires the ignored Pending)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/run-daily-job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "run-daily-job"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ran\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"at least our booking expired\", function () { pm.expect(pm.response.json().summary.expired_pending).to.be.at.least(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run daily job again (idempotent - nothing left to expire)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/run-daily-job",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "run-daily-job"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ran\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"no double-expiry\", function () { pm.expect(pm.response.json().summary.expired_pending).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check confirmed booking status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{expiryBookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{expiryBookingId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"cancelled by system\", function () { pm.expect(pm.response.json().booking.status).to.eql(\"cancelled\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset clock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/reset-clock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "reset-clock"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"reset\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "What time does the server think it is?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dev/now",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dev",
+                "now"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"now\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Cart (add / view / remove / checkout)",
+      "item": [
+        {
+          "name": "View cart (starts empty)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"empty to start\", function () { pm.expect(pm.response.json().cart.items.length).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add item to cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId2}}\",\n  \"startDate\": \"{{cartStart}}\",\n  \"endDate\": \"{{cartEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"cartStart\", new Date(Date.now()+40*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"cartEnd\", new Date(Date.now()+42*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"one item now in cart\", function () { pm.expect(pm.response.json().cart.items.length).to.eql(1); });",
+                  "pm.environment.set(\"cartItemId\", pm.response.json().cart.items[0]._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add your own equipment to cart (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId2}}\",\n  \"startDate\": \"{{cartStart}}\",\n  \"endDate\": \"{{cartEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cannot cart your own equipment\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add item overlapping an already-approved booking (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"startDate\": \"{{bookingAStart}}\",\n  \"endDate\": \"{{bookingAEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"bookingAStart\", new Date(Date.now()+30*24*60*60*1000+3600000).toISOString());",
+                  "pm.variables.set(\"bookingAEnd\", new Date(Date.now()+32*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"refused - equipmentId already has an approved booking from folder 3 covering these dates\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "View cart (now has one item)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"one item\", function () { pm.expect(pm.response.json().cart.items.length).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove the item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items/{{cartItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items",
+                "{{cartItemId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"removed\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"cart empty again\", function () { pm.expect(pm.response.json().cart.items.length).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout an empty cart (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "checkout"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"empty cart refused\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add two items from different owners",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId3}}\",\n  \"startDate\": \"{{cartStart2}}\",\n  \"endDate\": \"{{cartEnd2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"cartStart2\", new Date(Date.now()+45*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"cartEnd2\", new Date(Date.now()+46*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add second item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId5}}\",\n  \"startDate\": \"{{cartStart3}}\",\n  \"endDate\": \"{{cartEnd3}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"cartStart3\", new Date(Date.now()+50*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"cartEnd3\", new Date(Date.now()+51*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout - both items become independent Pending bookings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "checkout"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"checked out\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"two bookings created, cart now empty\", function () {\n  var j = pm.response.json();\n  pm.expect(j.created.length).to.eql(2);\n  pm.expect(j.failed.length).to.eql(0);\n  pm.expect(j.cart.items.length).to.eql(0);\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Cart race (two renters, same equipment, overlapping dates)",
+      "item": [
+        {
+          "name": "Renter adds item to cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId6}}\",\n  \"startDate\": \"{{raceStartA}}\",\n  \"endDate\": \"{{raceEndA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"raceStartA\", new Date(Date.now()+60*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"raceEndA\", new Date(Date.now()+63*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other renter adds overlapping item to cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId6}}\",\n  \"startDate\": \"{{raceStartB}}\",\n  \"endDate\": \"{{raceEndB}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set(\"raceStartB\", new Date(Date.now()+61*24*60*60*1000).toISOString());",
+                  "pm.variables.set(\"raceEndB\", new Date(Date.now()+64*24*60*60*1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"added - overlapping a Pending cart item is fine, only confirmed bookings block\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter checks out (becomes Pending)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "checkout"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"checked out\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"raceBookingA\", pm.response.json().created[0]._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other renter checks out (also becomes Pending - no conflict yet)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cart",
+                "checkout"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"checked out\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"raceBookingB\", pm.response.json().created[0]._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner approves A - this is the moment the race resolves",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{raceBookingA}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{raceBookingA}}",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"A approved\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"B was auto-rejected as a side effect\", function () {\n  var ids = pm.response.json().autoRejectedConflictingBookingIds || [];\n  pm.expect(ids).to.include(pm.environment.get(\"raceBookingB\"));\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm B's status - rejected, with a specific reason, no manual action needed",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{raceBookingB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{raceBookingB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"rejected with a clear reason\", function () {\n  var b = pm.response.json().booking;\n  pm.expect(b.status).to.eql(\"rejected\");\n  pm.expect(b.rejectionReason).to.match(/overlapping dates/);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other renter sees why, even though they never asked",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?unreadOnly=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications?unreadOnly=true"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has the rejection notification\", function () {\n  var n = pm.response.json().notifications;\n  pm.expect(n.some(function (x) { return x.bookingId === pm.environment.get(\"raceBookingB\"); })).to.eql(true);\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12. Renter & owner dashboards",
+      "item": [
+        {
+          "name": "Renter dashboard - brand new renter (should be all-empty)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{otherRenterId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{otherRenterId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"zero everything for a fresh signup\", function () {\n  var d = pm.response.json().dashboard;\n  pm.expect(d.upcoming.count).to.eql(0);\n  pm.expect(d.active.count).to.eql(0);\n  pm.expect(d.completed.count).to.eql(0);\n  pm.expect(d.totalSpent).to.eql(0);\n  pm.expect(d.overdue.count).to.eql(0);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter dashboard - main renter (has bookings from earlier folders)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has at least one completed rental with spend\", function () {\n  var d = pm.response.json().dashboard;\n  pm.expect(d.completed.count).to.be.at.least(1);\n  pm.expect(d.totalSpent).to.be.above(0);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter dashboard - wrong renter viewing someone else's (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"blocked - not your dashboard\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter dashboard - admin can view anyone's",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"admin can view\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter dashboard - unknown user id (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/000000000000000000000000/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "000000000000000000000000",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"unknown user\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner dashboard - brand new owner (should be all-empty)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherOwnerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/owners/{{otherOwnerId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "owners",
+                "{{otherOwnerId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"zero everything for a fresh signup\", function () {\n  var d = pm.response.json().dashboard;\n  pm.expect(d.totalRequests).to.eql(0);\n  pm.expect(d.requestedProducts).to.be.an('array').that.is.empty;\n  pm.expect(d.inspectionsDue.count).to.eql(0);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner dashboard - main owner (has requests/inspections from earlier folders)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/owners/{{ownerId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "owners",
+                "{{ownerId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has at least one total request on record\", function () {\n  var d = pm.response.json().dashboard;\n  pm.expect(d.totalRequests).to.be.at.least(1);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner dashboard - wrong owner viewing someone else's (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherOwnerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/owners/{{ownerId}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "owners",
+                "{{ownerId}}",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"blocked - not your dashboard\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "13. Renter & owner booking lists (GET, filterable, paginated)",
+      "item": [
+        {
+          "name": "Renter's full booking list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has pagination info\", function () { pm.expect(pm.response.json().pagination).to.have.property('total'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter's bookings filtered by status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/bookings?status=completed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "bookings?status=completed"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renter's bookings, page 1 limit 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/bookings?page=1&limit=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "bookings?page=1&limit=1"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"exactly one result\", function () { pm.expect(pm.response.json().bookings.length).to.be.at.most(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong renter viewing someone else's list (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renters/{{renterId}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renters",
+                "{{renterId}}",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"blocked\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner's full booking list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/owners/{{ownerId}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "owners",
+                "{{ownerId}}",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong owner viewing someone else's list (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherOwnerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/owners/{{ownerId}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "owners",
+                "{{ownerId}}",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"blocked\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "14. Admin monitoring (every booking, every user)",
+      "item": [
+        {
+          "name": "Non-admin tries to view all bookings (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"admin only\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin sees every booking across every user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "bookings"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"has at least one booking on record\", function () { pm.expect(pm.response.json().pagination.total).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin filters by status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/bookings?status=rejected",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "bookings?status=rejected"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin filters by a specific owner",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/bookings?ownerId={{ownerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "bookings?ownerId={{ownerId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"every result belongs to that owner\", function () {\n  var items = pm.response.json().bookings;\n  items.forEach(function (b) { pm.expect(b.ownerId).to.eql(pm.environment.get(\"ownerId\")); });\n});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "15. Notifications",
+      "item": [
+        {
+          "name": "Winning renter's notifications (should be empty - nothing unusual happened to them)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Losing renter's notifications (has the auto-rejection from folder 11)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"at least one notification, unread\", function () {\n  var j = pm.response.json();\n  pm.expect(j.notifications.length).to.be.at.least(1);\n  pm.expect(j.unreadCount).to.be.at.least(1);\n  pm.environment.set(\"notificationId\", j.notifications[0]._id);\n});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark it read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"marked\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"now read\", function () { pm.expect(pm.response.json().notification.read).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter to unread only (now excludes the one just marked read)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{otherRenterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?unreadOnly=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications?unreadOnly=true"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"fetched\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cannot mark someone else's notification read (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"not found for this user\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "16. History & error cases",
+      "item": [
+        {
+          "name": "Get booking history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{renterId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "renter"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "history"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"history fetched\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"history is an array with entries\", function () { pm.expect(pm.response.json().history.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No auth header at all (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"unauthenticated request blocked\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown booking id (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/000000000000000000000000/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "000000000000000000000000",
+                "approve"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"unknown booking\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Malformed booking id (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{ownerId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "owner"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/not-a-valid-id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "not-a-valid-id"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"bad id format\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    }
+  ]
+}
